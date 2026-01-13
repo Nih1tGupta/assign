@@ -1,14 +1,28 @@
-#pragma once
-#include <unordered_map>
-#include <cstdint>
-#include "protocol.hpp"
+#include "order_manager.hpp"
 
-/**
- * OrderDetails: Internal server state for a single order.
- * We store this to validate future CANCEL requests.
- */
-struct OrderDetails {
-    int32_t price;          // Original price from the NEW order [cite: 14, 18]
-    int32_t size;           // Original size from the NEW order [cite: 14, 18]
-    bool isCancelled;       // Track if this order has already been closed [cite: 25]
-};
+uint64_t OrderManager::addOrder(const NewOrderRequest& req) {
+    uint64_t id = nextId++;
+    orderBook[id] = {req.price, req.size, req.clientOrderId, false};
+    return id;
+}
+
+bool OrderManager::tryCancel(const CancelOrderRequest& req, int32_t& outClientId) {
+    auto it = orderBook.find(req.serverOrderId);
+
+    if (it == orderBook.end()) {
+        outClientId = -1;
+        return false;
+    }
+
+    if (it->second.isCancelled ||
+        it->second.price != req.price ||
+        it->second.size  != req.size) {
+
+        outClientId = it->second.clientOrderId;
+        return false;
+    }
+
+    it->second.isCancelled = true;
+    outClientId = it->second.clientOrderId;
+    return true;
+}
